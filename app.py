@@ -72,16 +72,27 @@ def load_models():
 rf_model, xgb_model, lr_model, scaler, cat_unique, shap_values, X_sample = load_models()
 
 # --- ENCODING HELPER ---
+# Marka segmentleri — bilinmeyen markalar için fallback
+LUXURY_FALLBACK  = "bmw"
+BUDGET_FALLBACK  = "nissan"
+DEFAULT_FALLBACK = "ford"
+
+LUXURY_BRANDS  = ["mclaren", "rolls-royce", "lamborghini", "bentley",
+                  "aston-martin", "ferrari", "lotus", "morgan"]
+BUDGET_BRANDS  = ["dacia", "seat", "skoda", "opel", "peugeot",
+                  "renault", "mitsubishi", "scion", "mercury"]
+
 def safe_encode(col, val, cat_unique):
     known_vals = cat_unique[col]
     if val not in known_vals:
-        # Sırasıyla en mantıklı fallback'i dene
-        if "unknown" in known_vals:
-            val = "unknown"
-        elif "other" in known_vals:
-            val = "other"
+        if col == "manufacturer":
+            if val in LUXURY_BRANDS:
+                val = LUXURY_FALLBACK
+            elif val in BUDGET_BRANDS:
+                val = BUDGET_FALLBACK
+            else:
+                val = DEFAULT_FALLBACK
         else:
-            # En sık geçen değere map et (alfabetik değil!)
             val = known_vals[0]
     le = LabelEncoder()
     le.fit(known_vals)
