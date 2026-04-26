@@ -367,13 +367,21 @@ elif page == "Price Prediction":
             value=10,
             step=1
         )
-        odometer = st.number_input(
-            "Odometer (miles)",
+        unit = st.radio(
+            "Odometer Unit",
+            ["Miles", "Kilometers"],
+            horizontal=True
+        )
+        odometer_input = st.number_input(
+            f"Odometer ({'miles' if unit == 'Miles' else 'km'})",
             min_value=0,
-            max_value=300000,
-            value=50000,
+            max_value=500000 if unit == "Kilometers" else 300000,
+            value=80000 if unit == "Kilometers" else 50000,
             step=1000
         )
+        # Modele göndermeden önce km ise mile'a çevir
+        odometer = odometer_input * 0.621371 if unit == "Kilometers" else odometer_input
+        odometer = min(odometer, 300000)  # Model limitini aşmasın
 
     st.markdown("---")
 
