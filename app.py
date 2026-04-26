@@ -75,7 +75,14 @@ rf_model, xgb_model, lr_model, scaler, cat_unique, shap_values, X_sample = load_
 def safe_encode(col, val, cat_unique):
     known_vals = cat_unique[col]
     if val not in known_vals:
-        val = "unknown" if "unknown" in known_vals else known_vals[0]
+        # Sırasıyla en mantıklı fallback'i dene
+        if "unknown" in known_vals:
+            val = "unknown"
+        elif "other" in known_vals:
+            val = "other"
+        else:
+            # En sık geçen değere map et (alfabetik değil!)
+            val = known_vals[0]
     le = LabelEncoder()
     le.fit(known_vals)
     return le.transform([val])[0], val
