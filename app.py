@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
 import json
-import shap
 from sklearn.preprocessing import LabelEncoder
 
 # --- PAGE CONFIG ---
@@ -13,6 +12,43 @@ st.set_page_config(
     page_title="Car Price Prediction",
     layout="wide"
 )
+
+# --- BRAND SEGMENTS ---
+LUXURY_BRANDS = [
+    "bmw", "mercedes-benz", "audi", "lexus", "porsche",
+    "jaguar", "land rover", "cadillac", "maserati", "bentley",
+    "rolls-royce", "lamborghini", "ferrari", "mclaren",
+    "aston-martin", "lotus", "genesis", "infiniti", "lincoln",
+    "alfa-romeo", "volvo", "acura"
+]
+
+BUDGET_BRANDS = [
+    "dacia", "seat", "skoda", "opel", "peugeot", "renault",
+    "fiat", "mitsubishi", "scion", "mercury", "saturn",
+    "pontiac", "buick", "kia", "hyundai", "suzuki"
+]
+
+MID_BRANDS = [
+    "ford", "chevrolet", "toyota", "honda", "nissan",
+    "mazda", "subaru", "volkswagen", "mini", "dodge",
+    "jeep", "ram", "gmc", "chrysler", "tesla", "rivian"
+]
+
+def get_fallback_brand(val, cat_unique):
+    known_vals = cat_unique["manufacturer"]
+    if val in LUXURY_BRANDS:
+        for candidate in ["bmw", "audi", "mercedes-benz"]:
+            if candidate in known_vals:
+                return candidate
+    elif val in BUDGET_BRANDS:
+        for candidate in ["nissan", "kia", "hyundai"]:
+            if candidate in known_vals:
+                return candidate
+    else:
+        for candidate in ["ford", "toyota", "honda"]:
+            if candidate in known_vals:
+                return candidate
+    return known_vals[0]
 
 # --- LISTS ---
 ALL_MANUFACTURERS = sorted([
@@ -72,26 +108,11 @@ def load_models():
 rf_model, xgb_model, lr_model, scaler, cat_unique, shap_values, X_sample = load_models()
 
 # --- ENCODING HELPER ---
-# Marka segmentleri — bilinmeyen markalar için fallback
-LUXURY_FALLBACK  = "bmw"
-BUDGET_FALLBACK  = "nissan"
-DEFAULT_FALLBACK = "ford"
-
-LUXURY_BRANDS  = ["mclaren", "rolls-royce", "lamborghini", "bentley",
-                  "aston-martin", "ferrari", "lotus", "morgan"]
-BUDGET_BRANDS  = ["dacia", "seat", "skoda", "opel", "peugeot",
-                  "renault", "mitsubishi", "scion", "mercury"]
-
 def safe_encode(col, val, cat_unique):
     known_vals = cat_unique[col]
     if val not in known_vals:
         if col == "manufacturer":
-            if val in LUXURY_BRANDS:
-                val = LUXURY_FALLBACK
-            elif val in BUDGET_BRANDS:
-                val = BUDGET_FALLBACK
-            else:
-                val = DEFAULT_FALLBACK
+            val = get_fallback_brand(val, cat_unique)
         else:
             val = known_vals[0]
     le = LabelEncoder()
@@ -341,7 +362,7 @@ elif page == "Models":
 # PAGE 3 — PRICE PREDICTION
 # =============================================================
 elif page == "Price Prediction":
-    st.title("Car Price Prediction")
+    st.title("Vehicle Price Prediction")
     st.markdown("---")
     st.markdown("Enter vehicle details below to get a price estimate using the Random Forest model.")
 
@@ -356,7 +377,7 @@ elif page == "Price Prediction":
         )
         manufacturer_custom = st.text_input(
             "Not in list? Type here",
-            placeholder="e.g. seat, dacia, skoda...",
+            placeholder="e.g. rivian, polestar, lucid...",
             key="mfr_custom"
         )
         if manufacturer_custom.strip():
@@ -364,7 +385,7 @@ elif page == "Price Prediction":
         elif manufacturer_select != "Select...":
             manufacturer = manufacturer_select
         else:
-            manufacturer = "other"
+            manufacturer = "ford"
 
         condition    = st.selectbox("Condition", ALL_CONDITIONS)
         cylinders    = st.selectbox("Cylinders", ALL_CYLINDERS)
@@ -397,21 +418,17 @@ elif page == "Price Prediction":
             value=80000 if unit == "Kilometers" else 50000,
             step=1000
         )
-        # Modele göndermeden önce km ise mile'a çevir
-        odometer = odometer_input * 0.621371 if unit == "Kilometers" else odometer_input
-        odometer = min(odometer, 300000)  # Model limitini aşmasın
+        odometer = odometer_input * 0.621371 if unit == "Kilometers" else float(odometer_input)
+        odometer = min(odometer, 300000)
 
     st.markdown("---")
 
     if st.button("Predict Price", use_container_width=True):
 
-        luxury_brands = ["bmw", "mercedes-benz", "audi", "lexus",
-                         "porsche", "jaguar", "land rover", "cadillac"]
-        is_luxury          = 1 if manufacturer in luxury_brands else 0
+        is_luxury = 1 if manufacturer in LUXURY_BRANDS else 0
         is_clean_title     = 1
         age_odometer_ratio = odometer / (vehicle_age + 1)
-
-        state_val = "unknown" if state == "other" else state
+        state_val          = "unknown" if state == "other" else state
 
         cat_cols_order = ["manufacturer", "condition", "cylinders", "fuel",
                           "transmission", "drive", "type", "paint_color", "state"]
@@ -425,11 +442,12 @@ elif page == "Price Prediction":
             enc_val, used_val = safe_encode(col, val, cat_unique)
             encoded[col] = enc_val
             if used_val != val:
-                warnings.append(f"{col}: {val} mapped to {used_val}")
+                warnings.append(f"{col}: '{val}' was not seen during training, mapped to '{used_val}'")
 
         if warnings:
-            st.warning(
-                "Some values were not seen during training and were mapped to the closest known category:\n\n" +
+            st.info(
+                "Note: Some values were not present in the training data and "
+                "were mapped to the closest known category:\n\n" +
                 "\n".join(warnings)
             )
 
@@ -463,9 +481,15 @@ elif page == "Price Prediction":
         col2.metric("Model Used", "Random Forest")
         col3.metric("Model R2", "0.8289")
 
+        odometer_display = (
+            f"{odometer_input:,} km ({odometer:,.0f} miles)"
+            if unit == "Kilometers"
+            else f"{odometer_input:,} miles"
+        )
+
         st.markdown(f"""
         **Input Summary:**
         - Manufacturer: {manufacturer} | Condition: {condition} | Fuel: {fuel}
-        - Vehicle Age: {vehicle_age} years | Odometer: {odometer:,} miles
+        - Vehicle Age: {vehicle_age} years | Odometer: {odometer_display}
         - Luxury Vehicle: {"Yes" if is_luxury else "No"}
         """)
