@@ -1,4 +1,3 @@
-app_code = '''
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -12,7 +11,6 @@ from sklearn.preprocessing import LabelEncoder
 # --- PAGE CONFIG ---
 st.set_page_config(
     page_title="Car Price Prediction",
-    page_icon="car",
     layout="wide"
 )
 
@@ -43,11 +41,13 @@ ALL_TYPES         = ["SUV", "bus", "convertible", "coupe", "hatchback", "mini-va
                      "wagon", "unknown"]
 ALL_COLORS        = ["black", "blue", "brown", "custom", "green", "grey",
                      "orange", "purple", "red", "silver", "white", "yellow", "unknown"]
-ALL_STATES        = sorted(["ak","al","ar","az","ca","co","ct","dc","de","fl",
+ALL_STATES        = sorted([
+                     "ak","al","ar","az","ca","co","ct","dc","de","fl",
                      "ga","hi","ia","id","il","in","ks","ky","la","ma",
                      "md","me","mi","mn","mo","ms","mt","nc","nd","ne",
                      "nh","nj","nm","nv","ny","oh","ok","or","pa","ri",
-                     "sc","sd","tn","tx","ut","va","vt","wa","wi","wv","wy"]) + ["other"]
+                     "sc","sd","tn","tx","ut","va","vt","wa","wi","wv","wy"
+                     ]) + ["other"]
 
 # --- LOAD MODELS ---
 @st.cache_resource
@@ -99,14 +99,14 @@ if page == "Home":
     col1.metric("Raw Data", "426,880 rows")
     col2.metric("After Cleaning", "367,218 rows")
     col3.metric("Features Used", "14")
-    col4.metric("Best R²", "0.8289")
+    col4.metric("Best R2", "0.8289")
 
     st.markdown("---")
     st.subheader("About the Dataset")
     st.markdown("""
-    This application uses a dataset scraped from **Craigslist**, the largest 
-    second-hand vehicle marketplace in the United States. The dataset contains 
-    listings from all 50 states with details such as manufacturer, condition, 
+    This application uses a dataset scraped from **Craigslist**, the largest
+    second-hand vehicle marketplace in the United States. The dataset contains
+    listings from all 50 states with details such as manufacturer, condition,
     odometer reading, fuel type, and more.
 
     The target variable is **price** — the listed sale price of each vehicle.
@@ -117,11 +117,11 @@ if page == "Home":
     with col1:
         st.markdown("""
         **Columns removed (12):**
-        Irrelevant or identifier columns such as 
-        url, VIN, image_url, description, county, 
-        region, lat, long, posting_date and size 
+        Irrelevant or identifier columns such as
+        url, VIN, image_url, description, county,
+        region, lat, long, posting_date and size
         were dropped from the dataset.
-        
+
         **Outlier filtering:**
         - Price: $500 — $150,000
         - Year: 1990 — 2022
@@ -132,12 +132,12 @@ if page == "Home":
         **Missing values:**
         - High missingness (>20%): filled with "unknown" category
         - Low missingness (<5%): filled with mode
-        
+
         **Key finding:**
-        After cleaning, price-year correlation 
-        jumped from -0.00 to +0.57, and 
+        After cleaning, price-year correlation
+        jumped from -0.00 to +0.57, and
         price-odometer from 0.01 to -0.54.
-        This confirms that outliers were masking 
+        This confirms that outliers were masking
         the true relationships in the data.
         """)
 
@@ -166,7 +166,7 @@ if page == "Home":
         "Model": ["Linear Regression", "Random Forest", "XGBoost v2"],
         "MAE ($)": [5646, 3439, 3803],
         "RMSE ($)": [8610, 6078, 6437],
-        "R²": [0.6567, 0.8289, 0.8081]
+        "R2": [0.6567, 0.8289, 0.8081]
     })
     st.dataframe(results, use_container_width=True)
 
@@ -178,77 +178,74 @@ elif page == "Models":
     st.markdown("---")
 
     st.markdown("""
-    Three machine learning models from different algorithm families were trained 
-    and compared on this dataset. Each model represents a different approach 
+    Three machine learning models from different algorithm families were trained
+    and compared on this dataset. Each model represents a different approach
     to the regression problem.
     """)
 
-    # --- Model descriptions ---
     st.subheader("1. Linear Regression — Baseline")
     st.markdown("""
-    Linear Regression is the simplest model used in this project. It assumes 
-    a linear relationship between the input features and the target variable (price). 
-    Each feature is assigned a coefficient that represents its contribution to the 
+    Linear Regression is the simplest model used in this project. It assumes
+    a linear relationship between the input features and the target variable (price).
+    Each feature is assigned a coefficient that represents its contribution to the
     predicted price.
 
-    **Why include it?**  
-    Every machine learning project needs a baseline. Without it, there is no 
+    **Why include it?**
+    Every machine learning project needs a baseline. Without it, there is no
     reference point to measure how much the more complex models actually improve.
 
-    **Limitation:**  
-    The relationship between vehicle price and features like age or mileage is 
-    not strictly linear. This model also produced negative price predictions for 
+    **Limitation:**
+    The relationship between vehicle price and features like age or mileage is
+    not strictly linear. This model also produced negative price predictions for
     some inputs, which is not meaningful in practice.
     """)
     st.markdown("---")
 
     st.subheader("2. Random Forest — Ensemble / Bagging")
     st.markdown("""
-    Random Forest builds a large number of decision trees (100 in this project), 
-    each trained on a random subset of the data and features. The final prediction 
+    Random Forest builds a large number of decision trees (100 in this project),
+    each trained on a random subset of the data and features. The final prediction
     is the average of all individual tree predictions.
 
-    **Why is it powerful?**  
-    Unlike Linear Regression, Random Forest can capture non-linear relationships 
-    and complex interactions between features. For example, it can learn that 
-    a 5-year-old BMW behaves very differently from a 5-year-old Honda in terms 
+    **Why is it powerful?**
+    Unlike Linear Regression, Random Forest can capture non-linear relationships
+    and complex interactions between features. For example, it can learn that
+    a 5-year-old BMW behaves very differently from a 5-year-old Honda in terms
     of price — something a linear model cannot express.
 
-    **Parameters used:**  
+    **Parameters used:**
     n_estimators = 100, max_depth = 15, min_samples_leaf = 5
     """)
     st.markdown("---")
 
     st.subheader("3. XGBoost — Ensemble / Boosting")
     st.markdown("""
-    XGBoost (Extreme Gradient Boosting) also builds multiple decision trees, 
-    but unlike Random Forest, each tree is trained to correct the errors made 
-    by the previous one. This sequential learning process makes it highly 
+    XGBoost (Extreme Gradient Boosting) also builds multiple decision trees,
+    but unlike Random Forest, each tree is trained to correct the errors made
+    by the previous one. This sequential learning process makes it highly
     effective on structured tabular data.
 
-    **Why include it?**  
-    XGBoost is considered state-of-the-art for tabular datasets and wins the 
-    majority of structured data competitions. It also includes built-in 
+    **Why include it?**
+    XGBoost is considered state-of-the-art for tabular datasets and wins the
+    majority of structured data competitions. It also includes built-in
     regularization (L1 and L2), which helps prevent overfitting.
 
-    **Parameters used:**  
-    n_estimators = 500, learning_rate = 0.02, max_depth = 7, 
+    **Parameters used:**
+    n_estimators = 500, learning_rate = 0.02, max_depth = 7,
     subsample = 0.8, colsample_bytree = 0.8
     """)
     st.markdown("---")
 
-    # --- Metric comparison ---
     st.subheader("Performance Comparison")
     st.markdown("""
     Three metrics are used to evaluate model performance:
 
-    - **MAE (Mean Absolute Error):** Average dollar amount the model is off by. 
-    Easy to interpret — if MAE is $3,439 it means predictions are wrong by 
-    $3,439 on average.
-    - **RMSE (Root Mean Squared Error):** Similar to MAE but penalizes large 
+    - **MAE (Mean Absolute Error):** Average dollar amount the model is off by.
+    If MAE is $3,439 it means predictions are wrong by $3,439 on average.
+    - **RMSE (Root Mean Squared Error):** Similar to MAE but penalizes large
     errors more heavily. Always higher than MAE.
-    - **R² (R-squared):** Proportion of price variance explained by the model. 
-    Ranges from 0 to 1. Higher is better — 0.83 means the model explains 
+    - **R2 (R-squared):** Proportion of price variance explained by the model.
+    Ranges from 0 to 1. Higher is better — 0.83 means the model explains
     83% of the variation in price.
     """)
 
@@ -275,8 +272,8 @@ elif page == "Models":
         axes[1].text(i, v+50, f"${v:,}", ha="center", fontweight="bold")
 
     axes[2].bar(models, r2_vals, color=colors)
-    axes[2].set_title("R² Score — Higher is Better", fontweight="bold")
-    axes[2].set_ylabel("R²")
+    axes[2].set_title("R2 Score — Higher is Better", fontweight="bold")
+    axes[2].set_ylabel("R2")
     axes[2].set_ylim(0, 1)
     axes[2].tick_params(axis="x", rotation=15)
     for i, v in enumerate(r2_vals):
@@ -295,13 +292,13 @@ elif page == "Models":
     st.markdown("---")
     st.subheader("Why did Random Forest outperform XGBoost?")
     st.markdown("""
-    XGBoost is generally considered superior for tabular data, yet Random Forest 
+    XGBoost is generally considered superior for tabular data, yet Random Forest
     performed better here. The likely reasons are:
 
     - The dataset is large (293,774 training rows) — Random Forest scales well at this size
-    - The dataset is heavily categorical (9 categorical columns) — Random Forest 
+    - The dataset is heavily categorical (9 categorical columns) — Random Forest
     handles these naturally
-    - XGBoost would likely close the gap with extensive hyperparameter tuning 
+    - XGBoost would likely close the gap with extensive hyperparameter tuning
     (e.g. via Optuna or GridSearchCV), but this falls outside the scope of this project
 
     This result itself is a meaningful finding worth discussing.
@@ -316,9 +313,9 @@ elif page == "Models":
     | Random Forest | -$29 | $6,078 | -$10,442 / +$11,916 |
     | XGBoost v2 | -$11 | $6,437 | -$10,624 / +$13,140 |
 
-    All three models have a mean error close to zero, meaning none of them 
-    systematically over- or under-predict. The key difference is the spread: 
-    Random Forest has the narrowest error distribution, meaning its predictions 
+    All three models have a mean error close to zero, meaning none of them
+    systematically over or under predict. The key difference is the spread:
+    Random Forest has the narrowest error distribution, meaning its predictions
     are the most consistent.
     """)
 
@@ -363,16 +360,20 @@ elif page == "Price Prediction":
         state       = st.selectbox("State", ALL_STATES)
 
     with col3:
-        vehicle_age = st.number_input("Vehicle Age (years)", 
-                                       min_value=2, 
-                                       max_value=34, 
-                                       value=10, 
-                                       step=1)
-        odometer    = st.number_input("Odometer (miles)", 
-                                       min_value=0, 
-                                       max_value=300000, 
-                                       value=50000, 
-                                       step=1000)
+        vehicle_age = st.number_input(
+            "Vehicle Age (years)",
+            min_value=2,
+            max_value=34,
+            value=10,
+            step=1
+        )
+        odometer = st.number_input(
+            "Odometer (miles)",
+            min_value=0,
+            max_value=300000,
+            value=50000,
+            step=1000
+        )
 
     st.markdown("---")
 
@@ -384,7 +385,6 @@ elif page == "Price Prediction":
         is_clean_title     = 1
         age_odometer_ratio = odometer / (vehicle_age + 1)
 
-        # state "other" → unknown
         state_val = "unknown" if state == "other" else state
 
         cat_cols_order = ["manufacturer", "condition", "cylinders", "fuel",
@@ -403,8 +403,8 @@ elif page == "Price Prediction":
 
         if warnings:
             st.warning(
-                "Some values were not seen during training and were mapped to the closest known category:\\n\\n" +
-                "\\n".join(warnings)
+                "Some values were not seen during training and were mapped to the closest known category:\n\n" +
+                "\n".join(warnings)
             )
 
         num_raw    = np.array([[odometer, vehicle_age, age_odometer_ratio]])
@@ -435,7 +435,7 @@ elif page == "Price Prediction":
         col1, col2, col3 = st.columns(3)
         col1.metric("Estimated Price", f"${prediction:,.0f}")
         col2.metric("Model Used", "Random Forest")
-        col3.metric("Model R²", "0.8289")
+        col3.metric("Model R2", "0.8289")
 
         st.markdown(f"""
         **Input Summary:**
@@ -443,9 +443,3 @@ elif page == "Price Prediction":
         - Vehicle Age: {vehicle_age} years | Odometer: {odometer:,} miles
         - Luxury Vehicle: {"Yes" if is_luxury else "No"}
         """)
-'''
-
-with open('/content/repo/app.py', 'w') as f:
-    f.write(app_code)
-
-print("app.py updated!")
