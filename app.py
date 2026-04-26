@@ -323,7 +323,7 @@ elif page == "Models":
 # PAGE 3 — PRICE PREDICTION
 # =============================================================
 elif page == "Price Prediction":
-    st.title("Vehicle Price Prediction")
+    st.title("Car Price Prediction")
     st.markdown("---")
     st.markdown("Enter vehicle details below to get a price estimate using the Random Forest model.")
 
