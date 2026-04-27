@@ -52,7 +52,7 @@ ALL_STATES        = ["ak","al","ar","az","ca","co","ct","dc","de","fl",
 # ─── MODEL YÜKLEME ─────────────────────────────────────────
 @st.cache_resource
 def load_models():
-    base = "/content/drive/MyDrive/car_price_app/models"
+    base = "models"
     with open(f"{base}/rf_model.pkl", "rb") as f:
         rf = pickle.load(f)
     with open(f"{base}/xgb_model.pkl", "rb") as f:
