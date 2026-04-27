@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -6,17 +5,52 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pickle
 import json
-import shap
 from sklearn.preprocessing import LabelEncoder
 
-# ─── SAYFA AYARI ───────────────────────────────────────────
+# --- PAGE CONFIG ---
 st.set_page_config(
-    page_title="Araç Fiyat Tahmini",
-    page_icon="🚗",
+    page_title="Car Price Prediction",
     layout="wide"
 )
 
-# ─── GERÇEK DÜNYA LİSTELERİ ────────────────────────────────
+# --- BRAND SEGMENTS ---
+LUXURY_BRANDS = [
+    "bmw", "mercedes-benz", "audi", "lexus", "porsche",
+    "jaguar", "land rover", "cadillac", "maserati", "bentley",
+    "rolls-royce", "lamborghini", "ferrari", "mclaren",
+    "aston-martin", "lotus", "genesis", "infiniti", "lincoln",
+    "alfa-romeo", "volvo", "acura"
+]
+
+BUDGET_BRANDS = [
+    "dacia", "seat", "skoda", "opel", "peugeot", "renault",
+    "fiat", "mitsubishi", "scion", "mercury", "saturn",
+    "pontiac", "buick", "kia", "hyundai", "suzuki"
+]
+
+MID_BRANDS = [
+    "ford", "chevrolet", "toyota", "honda", "nissan",
+    "mazda", "subaru", "volkswagen", "mini", "dodge",
+    "jeep", "ram", "gmc", "chrysler", "tesla", "rivian"
+]
+
+def get_fallback_brand(val, cat_unique):
+    known_vals = cat_unique["manufacturer"]
+    if val in LUXURY_BRANDS:
+        for candidate in ["bmw", "audi", "mercedes-benz"]:
+            if candidate in known_vals:
+                return candidate
+    elif val in BUDGET_BRANDS:
+        for candidate in ["nissan", "kia", "hyundai"]:
+            if candidate in known_vals:
+                return candidate
+    else:
+        for candidate in ["ford", "toyota", "honda"]:
+            if candidate in known_vals:
+                return candidate
+    return known_vals[0]
+
+# --- LISTS ---
 ALL_MANUFACTURERS = sorted([
     "acura", "alfa-romeo", "aston-martin", "audi", "bentley",
     "bmw", "buick", "cadillac", "chevrolet", "chrysler",
@@ -43,13 +77,15 @@ ALL_TYPES         = ["SUV", "bus", "convertible", "coupe", "hatchback", "mini-va
                      "wagon", "unknown"]
 ALL_COLORS        = ["black", "blue", "brown", "custom", "green", "grey",
                      "orange", "purple", "red", "silver", "white", "yellow", "unknown"]
-ALL_STATES        = ["ak","al","ar","az","ca","co","ct","dc","de","fl",
+ALL_STATES        = sorted([
+                     "ak","al","ar","az","ca","co","ct","dc","de","fl",
                      "ga","hi","ia","id","il","in","ks","ky","la","ma",
                      "md","me","mi","mn","mo","ms","mt","nc","nd","ne",
                      "nh","nj","nm","nv","ny","oh","ok","or","pa","ri",
-                     "sc","sd","tn","tx","ut","va","vt","wa","wi","wv","wy"]
+                     "sc","sd","tn","tx","ut","va","vt","wa","wi","wv","wy"
+                     ]) + ["other"]
 
-# ─── MODEL YÜKLEME ─────────────────────────────────────────
+# --- LOAD MODELS ---
 @st.cache_resource
 def load_models():
     base = "models"
@@ -71,133 +107,186 @@ def load_models():
 
 rf_model, xgb_model, lr_model, scaler, cat_unique, shap_values, X_sample = load_models()
 
-# ─── ENCODING YARDIMCI FONKSİYON ───────────────────────────
+# --- ENCODING HELPER ---
 def safe_encode(col, val, cat_unique):
     known_vals = cat_unique[col]
     if val not in known_vals:
-        val = "unknown" if "unknown" in known_vals else known_vals[0]
+        if col == "manufacturer":
+            val = get_fallback_brand(val, cat_unique)
+        else:
+            val = known_vals[0]
     le = LabelEncoder()
     le.fit(known_vals)
     return le.transform([val])[0], val
 
-# ─── SIDEBAR ───────────────────────────────────────────────
-st.sidebar.title("🚗 Araç Fiyat Tahmini")
+# --- SIDEBAR ---
+st.sidebar.title("Car Price Prediction")
 st.sidebar.markdown("---")
 page = st.sidebar.radio(
-    "Sayfa Seç",
-    ["Ana Sayfa", "Veri Keşfi", "Model Karşılaştırması", "SHAP Analizi", "Fiyat Tahmini"]
+    "Navigate",
+    ["Home", "Models", "Price Prediction"]
 )
 
-# ══════════════════════════════════════════════════════════════
-# SAYFA 1 — ANA SAYFA
-# ══════════════════════════════════════════════════════════════
-if page == "Ana Sayfa":
-    st.title("🚗 Craigslist Araç Fiyat Tahmin Uygulaması")
+# =============================================================
+# PAGE 1 — HOME
+# =============================================================
+if page == "Home":
+    st.title("Car Price Prediction — Craigslist Dataset")
     st.markdown("---")
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Toplam Veri", "426,880")
-    col2.metric("Temizleme Sonrası", "367,218")
-    col3.metric("Feature Sayısı", "14")
-    col4.metric("En İyi R²", "0.8289")
+    col1.metric("Raw Data", "426,880 rows")
+    col2.metric("After Cleaning", "367,218 rows")
+    col3.metric("Features Used", "14")
+    col4.metric("Best R2", "0.8289")
 
     st.markdown("---")
-    st.subheader("📋 Proje Hakkında")
+    st.subheader("About the Dataset")
     st.markdown("""
-    Bu uygulama, ABD\'nin en büyük ikinci el araç platformu **Craigslist**\'ten
-    derlenen veri seti üzerinde makine öğrenmesi modelleri eğiterek araç fiyatı
-    tahmini yapmaktadır.
+    This application uses a dataset scraped from **Craigslist**, the largest
+    second-hand vehicle marketplace in the United States. The dataset contains
+    listings from all 50 states with details such as manufacturer, condition,
+    odometer reading, fuel type, and more.
+
+    The target variable is **price** — the listed sale price of each vehicle.
     """)
 
-    st.subheader("🔄 Pipeline")
+    st.subheader("Data Cleaning")
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""
-        1. ✅ Veri Yükleme (426,880 satır, 26 kolon)
-        2. ✅ EDA (dağılımlar, korelasyon analizi)
-        3. ✅ Veri Temizleme (367,218 satır, 0 eksik)
-        4. ✅ Feature Engineering (4 yeni feature)
+        **Columns removed (12):**
+        Irrelevant or identifier columns such as
+        url, VIN, image_url, description, county,
+        region, lat, long, posting_date and size
+        were dropped from the dataset.
+
+        **Outlier filtering:**
+        - Price: $500 — $150,000
+        - Year: 1990 — 2022
+        - Odometer: 0 — 300,000 miles
         """)
     with col2:
         st.markdown("""
-        5. ✅ Feature Selection (15 kolon)
-        6. ✅ Train/Test Split (80/20)
-        7. ✅ Normalizasyon (StandardScaler)
-        8. ✅ Model Kurma (LR, RF, XGBoost)
-        9. ✅ Model Değerlendirme
-        10. ✅ SHAP Analizi
+        **Missing values:**
+        - High missingness (>20%): filled with "unknown" category
+        - Low missingness (<5%): filled with mode
+
+        **Key finding:**
+        After cleaning, price-year correlation
+        jumped from -0.00 to +0.57, and
+        price-odometer from 0.01 to -0.54.
+        This confirms that outliers were masking
+        the true relationships in the data.
         """)
 
-    st.subheader("📊 Model Sonuçları")
+    st.markdown("---")
+    st.subheader("Feature Engineering")
+    fe_data = pd.DataFrame({
+        "Feature": ["vehicle_age", "age_odometer_ratio", "is_luxury", "is_clean_title"],
+        "Formula": [
+            "2024 - year",
+            "odometer / (vehicle_age + 1)",
+            "1 if brand is luxury else 0",
+            "1 if title_status == clean else 0"
+        ],
+        "Description": [
+            "Age of the vehicle in years",
+            "Average annual mileage — measures wear rate",
+            "Binary flag for luxury brands (BMW, Audi, Mercedes etc.)",
+            "Binary flag for clean title status"
+        ]
+    })
+    st.dataframe(fe_data, use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("Model Results Overview")
     results = pd.DataFrame({
         "Model": ["Linear Regression", "Random Forest", "XGBoost v2"],
         "MAE ($)": [5646, 3439, 3803],
         "RMSE ($)": [8610, 6078, 6437],
-        "R²": [0.6567, 0.8289, 0.8081]
+        "R2": [0.6567, 0.8289, 0.8081]
     })
     st.dataframe(results, use_container_width=True)
 
-# ══════════════════════════════════════════════════════════════
-# SAYFA 2 — VERİ KEŞFİ
-# ══════════════════════════════════════════════════════════════
-elif page == "Veri Keşfi":
-    st.title("🔍 Veri Keşfi")
+# =============================================================
+# PAGE 2 — MODELS
+# =============================================================
+elif page == "Models":
+    st.title("Models")
     st.markdown("---")
 
-    st.subheader("Outlier Temizleme: Korelasyon Karşılaştırması")
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-
-    corr_before = pd.DataFrame({
-        "price":    [1.00, -0.00,  0.01],
-        "year":     [-0.00, 1.00, -0.16],
-        "odometer": [0.01, -0.16,  1.00]
-    }, index=["price", "year", "odometer"])
-
-    corr_after = pd.DataFrame({
-        "price":    [1.00,  0.57, -0.54],
-        "year":     [0.57,  1.00, -0.64],
-        "odometer": [-0.54, -0.64, 1.00]
-    }, index=["price", "year", "odometer"])
-
-    sns.heatmap(corr_before, annot=True, fmt=".2f", cmap="coolwarm",
-                ax=axes[0], vmin=-1, vmax=1)
-    axes[0].set_title("HAM VERİ Korelasyonu", fontweight="bold")
-
-    sns.heatmap(corr_after, annot=True, fmt=".2f", cmap="coolwarm",
-                ax=axes[1], vmin=-1, vmax=1)
-    axes[1].set_title("TEMİZ VERİ Korelasyonu", fontweight="bold")
-
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close()
-
-    st.info("""
-    Ham veride price-year korelasyonu **-0.00** iken temiz veride **+0.57**\'e yükseldi.
-    Bu, outlier\'ların gerçek istatistiksel ilişkileri tamamen maskelediğinin kanıtıdır.
+    st.markdown("""
+    Three machine learning models from different algorithm families were trained
+    and compared on this dataset. Each model represents a different approach
+    to the regression problem.
     """)
 
-    st.subheader("Veri Temizleme Özeti")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Başlangıç Satır", "426,880")
-    col2.metric("Temizleme Sonrası", "367,218")
-    col3.metric("Kaybedilen", "59,662 (%14)")
+    st.subheader("1. Linear Regression — Baseline")
+    st.markdown("""
+    Linear Regression is the simplest model used in this project. It assumes
+    a linear relationship between the input features and the target variable (price).
+    Each feature is assigned a coefficient that represents its contribution to the
+    predicted price.
 
-    st.subheader("Eksik Değer Analizi")
-    missing_data = pd.DataFrame({
-        "Kolon": ["cylinders", "condition", "drive", "paint_color", "type",
-                  "manufacturer", "title_status", "model", "fuel", "transmission"],
-        "Eksik %": [41.2, 38.0, 30.2, 28.7, 20.9, 3.2, 1.8, 0.9, 0.6, 0.4],
-        "Strateji": ["unknown", "unknown", "unknown", "unknown", "unknown",
-                     "mod", "mod", "mod", "mod", "mod"]
-    })
-    st.dataframe(missing_data, use_container_width=True)
+    **Why include it?**
+    Every machine learning project needs a baseline. Without it, there is no
+    reference point to measure how much the more complex models actually improve.
 
-# ══════════════════════════════════════════════════════════════
-# SAYFA 3 — MODEL KARŞILAŞTIRMASI
-# ══════════════════════════════════════════════════════════════
-elif page == "Model Karşılaştırması":
-    st.title("📊 Model Karşılaştırması")
+    **Limitation:**
+    The relationship between vehicle price and features like age or mileage is
+    not strictly linear. This model also produced negative price predictions for
+    some inputs, which is not meaningful in practice.
+    """)
     st.markdown("---")
+
+    st.subheader("2. Random Forest — Ensemble / Bagging")
+    st.markdown("""
+    Random Forest builds a large number of decision trees (100 in this project),
+    each trained on a random subset of the data and features. The final prediction
+    is the average of all individual tree predictions.
+
+    **Why is it powerful?**
+    Unlike Linear Regression, Random Forest can capture non-linear relationships
+    and complex interactions between features. For example, it can learn that
+    a 5-year-old BMW behaves very differently from a 5-year-old Honda in terms
+    of price — something a linear model cannot express.
+
+    **Parameters used:**
+    n_estimators = 100, max_depth = 15, min_samples_leaf = 5
+    """)
+    st.markdown("---")
+
+    st.subheader("3. XGBoost — Ensemble / Boosting")
+    st.markdown("""
+    XGBoost (Extreme Gradient Boosting) also builds multiple decision trees,
+    but unlike Random Forest, each tree is trained to correct the errors made
+    by the previous one. This sequential learning process makes it highly
+    effective on structured tabular data.
+
+    **Why include it?**
+    XGBoost is considered state-of-the-art for tabular datasets and wins the
+    majority of structured data competitions. It also includes built-in
+    regularization (L1 and L2), which helps prevent overfitting.
+
+    **Parameters used:**
+    n_estimators = 500, learning_rate = 0.02, max_depth = 7,
+    subsample = 0.8, colsample_bytree = 0.8
+    """)
+    st.markdown("---")
+
+    st.subheader("Performance Comparison")
+    st.markdown("""
+    Three metrics are used to evaluate model performance:
+
+    - **MAE (Mean Absolute Error):** Average dollar amount the model is off by.
+    If MAE is $3,439 it means predictions are wrong by $3,439 on average.
+    - **RMSE (Root Mean Squared Error):** Similar to MAE but penalizes large
+    errors more heavily. Always higher than MAE.
+    - **R2 (R-squared):** Proportion of price variance explained by the model.
+    Ranges from 0 to 1. Higher is better — 0.83 means the model explains
+    83% of the variation in price.
+    """)
 
     models    = ["Linear Regression", "Random Forest", "XGBoost v2"]
     mae_vals  = [5646, 3439, 3803]
@@ -205,26 +294,25 @@ elif page == "Model Karşılaştırması":
     r2_vals   = [0.6567, 0.8289, 0.8081]
     colors    = ["#e74c3c", "#2ecc71", "#3498db"]
 
-    st.subheader("Metrik Karşılaştırması")
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
     axes[0].bar(models, mae_vals, color=colors)
-    axes[0].set_title("MAE (Düşük = İyi)", fontweight="bold")
-    axes[0].set_ylabel("Dolar ($)")
+    axes[0].set_title("MAE — Lower is Better", fontweight="bold")
+    axes[0].set_ylabel("Dollars ($)")
     axes[0].tick_params(axis="x", rotation=15)
     for i, v in enumerate(mae_vals):
         axes[0].text(i, v+50, f"${v:,}", ha="center", fontweight="bold")
 
     axes[1].bar(models, rmse_vals, color=colors)
-    axes[1].set_title("RMSE (Düşük = İyi)", fontweight="bold")
-    axes[1].set_ylabel("Dolar ($)")
+    axes[1].set_title("RMSE — Lower is Better", fontweight="bold")
+    axes[1].set_ylabel("Dollars ($)")
     axes[1].tick_params(axis="x", rotation=15)
     for i, v in enumerate(rmse_vals):
         axes[1].text(i, v+50, f"${v:,}", ha="center", fontweight="bold")
 
     axes[2].bar(models, r2_vals, color=colors)
-    axes[2].set_title("R² Skoru (Yüksek = İyi)", fontweight="bold")
-    axes[2].set_ylabel("R²")
+    axes[2].set_title("R2 Score — Higher is Better", fontweight="bold")
+    axes[2].set_ylabel("R2")
     axes[2].set_ylim(0, 1)
     axes[2].tick_params(axis="x", rotation=15)
     for i, v in enumerate(r2_vals):
@@ -234,139 +322,118 @@ elif page == "Model Karşılaştırması":
     st.pyplot(fig)
     plt.close()
 
+    st.success(
+        "Random Forest achieved the best performance across all metrics. "
+        "MAE: $3,439 | RMSE: $6,078 | R2: 0.8289 — "
+        "explaining 82.9% of price variance."
+    )
+
     st.markdown("---")
-    st.success("""
-    🏆 **Random Forest** tüm metriklerde en iyi performansı gösterdi.
-    MAE: $3,439 | RMSE: $6,078 | R²: 0.8289
-    Fiyat varyansının %82.9\'unu açıklıyor!
+    st.subheader("Why did Random Forest outperform XGBoost?")
+    st.markdown("""
+    XGBoost is generally considered superior for tabular data, yet Random Forest
+    performed better here. The likely reasons are:
+
+    - The dataset is large (293,774 training rows) — Random Forest scales well at this size
+    - The dataset is heavily categorical (9 categorical columns) — Random Forest
+    handles these naturally
+    - XGBoost would likely close the gap with extensive hyperparameter tuning
+    (e.g. via Optuna or GridSearchCV), but this falls outside the scope of this project
+
+    This result itself is a meaningful finding worth discussing.
     """)
 
-    st.subheader("Hata Dağılımı Karşılaştırması")
+    st.markdown("---")
+    st.subheader("Error Distribution")
     st.markdown("""
-    | Model | Ort. Hata | Std | %95 Aralık |
+    | Model | Mean Error | Std Dev | 95% Interval |
     |---|---|---|---|
-    | Linear Regression | -\$29 | \$8,610 | -\$13,929 / +\$18,106 |
-    | Random Forest | -\$29 | \$6,078 | -\$10,442 / +\$11,916 |
-    | XGBoost v2 | -\$11 | \$6,437 | -\$10,624 / +\$13,140 |
+    | Linear Regression | -$29 | $8,610 | -$13,929 / +$18,106 |
+    | Random Forest | -$29 | $6,078 | -$10,442 / +$11,916 |
+    | XGBoost v2 | -$11 | $6,437 | -$10,624 / +$13,140 |
+
+    All three models have a mean error close to zero, meaning none of them
+    systematically over or under predict. The key difference is the spread:
+    Random Forest has the narrowest error distribution, meaning its predictions
+    are the most consistent.
     """)
 
-# ══════════════════════════════════════════════════════════════
-# SAYFA 4 — SHAP ANALİZİ
-# ══════════════════════════════════════════════════════════════
-elif page == "SHAP Analizi":
-    st.title("🔬 SHAP Analizi")
+# =============================================================
+# PAGE 3 — PRICE PREDICTION
+# =============================================================
+elif page == "Price Prediction":
+    st.title("Vehicle Price Prediction")
     st.markdown("---")
-    st.markdown("""
-    SHAP (SHapley Additive exPlanations) analizi, modelin her tahmini için
-    hangi feature\'ın ne kadar ve hangi yönde etkili olduğunu gösterir.
-    """)
-
-    st.subheader("Ortalama Mutlak SHAP Değerleri")
-    shap_df = pd.DataFrame({
-        "Feature": ["vehicle_age","odometer","drive","cylinders","fuel",
-                    "is_luxury","type","manufacturer","condition",
-                    "transmission","age_odometer_ratio","state",
-                    "paint_color","is_clean_title"],
-        "SHAP ($)": [6798,2855,2203,2198,1912,
-                     747,648,577,374,
-                     276,220,181,177,109]
-    }).sort_values("SHAP ($)", ascending=True)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.barh(shap_df["Feature"], shap_df["SHAP ($)"], color="#2ecc71")
-    ax.set_xlabel("Ortalama Mutlak SHAP Değeri ($)")
-    ax.set_title("SHAP Feature Importance", fontweight="bold")
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close()
-
-    st.subheader("SHAP Beeswarm Plot")
-    fig, ax = plt.subplots(figsize=(10, 7))
-    plt.sca(ax)
-    shap.summary_plot(shap_values, X_sample, show=False)
-    ax.set_title("SHAP Summary — Yön ve Büyüklük", fontweight="bold")
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close()
-
-    st.subheader("SHAP Dependence Plot")
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    shap.dependence_plot("vehicle_age", shap_values, X_sample,
-                         ax=axes[0], show=False)
-    axes[0].set_title("vehicle_age → Fiyata Etkisi", fontweight="bold")
-    shap.dependence_plot("odometer", shap_values, X_sample,
-                         ax=axes[1], show=False)
-    axes[1].set_title("odometer → Fiyata Etkisi", fontweight="bold")
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close()
-
-    st.info("""
-    **Bulgular:**
-    - vehicle_age tek başına fiyatı ortalama **$6,798** etkiliyor
-    - Genç araçlar fiyatı **+$25,000**\'e kadar artırabilirken yaşlı araçlar **-$10,000**\'e kadar düşürebiliyor
-    - odometer arttıkça fiyat üzerindeki etkisi güçlü negatif yönde seyrediyor
-    """)
-
-# ══════════════════════════════════════════════════════════════
-# SAYFA 5 — FİYAT TAHMİNİ
-# ══════════════════════════════════════════════════════════════
-elif page == "Fiyat Tahmini":
-    st.title("💰 Araç Fiyat Tahmini")
-    st.markdown("---")
-    st.markdown("Araç özelliklerini girerek **Random Forest** modeliyle fiyat tahmini yapın.")
+    st.markdown("Enter vehicle details below to get a price estimate using the Random Forest model.")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown("**Marka**")
+        st.markdown("**Manufacturer**")
         manufacturer_select = st.selectbox(
-            "Listeden seç",
-            ["Listeden seç..."] + ALL_MANUFACTURERS,
+            "Select from list",
+            ["Select..."] + ALL_MANUFACTURERS,
             key="mfr_select"
         )
         manufacturer_custom = st.text_input(
-            "Listede yok mu? Buraya yaz",
-            placeholder="örn: seat, dacia, skoda...",
+            "Not in list? Type here",
+            placeholder="e.g. rivian, polestar, lucid...",
             key="mfr_custom"
         )
-        # Öncelik: serbest metin > dropdown
         if manufacturer_custom.strip():
             manufacturer = manufacturer_custom.strip().lower()
-        elif manufacturer_select != "Listeden seç...":
+        elif manufacturer_select != "Select...":
             manufacturer = manufacturer_select
         else:
-            manufacturer = "other"
+            manufacturer = "ford"
 
-        condition    = st.selectbox("Durum", ALL_CONDITIONS)
-        cylinders    = st.selectbox("Silindir", ALL_CYLINDERS)
-        fuel         = st.selectbox("Yakıt Tipi", ALL_FUELS)
-        transmission = st.selectbox("Şanzıman", ALL_TRANSMISSIONS)
+        condition    = st.selectbox("Condition", ALL_CONDITIONS)
+        cylinders    = st.selectbox("Cylinders", ALL_CYLINDERS)
+        fuel         = st.selectbox("Fuel Type", ALL_FUELS)
+        transmission = st.selectbox("Transmission", ALL_TRANSMISSIONS)
 
     with col2:
-        drive       = st.selectbox("Çekiş", ALL_DRIVES)
-        type_       = st.selectbox("Araç Tipi", ALL_TYPES)
-        paint_color = st.selectbox("Renk", ALL_COLORS)
-        state       = st.selectbox("Eyalet", ALL_STATES)
+        drive       = st.selectbox("Drive Type", ALL_DRIVES)
+        type_       = st.selectbox("Vehicle Type", ALL_TYPES)
+        paint_color = st.selectbox("Color", ALL_COLORS)
+        state       = st.selectbox("State", ALL_STATES)
 
     with col3:
-        vehicle_age = st.slider("Araç Yaşı (yıl)", 2, 34, 10)
-        odometer    = st.number_input("Kilometre (mil)", 0, 300000, 50000, step=1000)
+        vehicle_age = st.number_input(
+            "Vehicle Age (years)",
+            min_value=2,
+            max_value=34,
+            value=10,
+            step=1
+        )
+        unit = st.radio(
+            "Odometer Unit",
+            ["Miles", "Kilometers"],
+            horizontal=True
+        )
+        odometer_input = st.number_input(
+            f"Odometer ({'miles' if unit == 'Miles' else 'km'})",
+            min_value=0,
+            max_value=500000 if unit == "Kilometers" else 300000,
+            value=80000 if unit == "Kilometers" else 50000,
+            step=1000
+        )
+        odometer = odometer_input * 0.621371 if unit == "Kilometers" else float(odometer_input)
+        odometer = min(odometer, 300000)
 
     st.markdown("---")
 
-    if st.button("🔍 Fiyat Tahmin Et", use_container_width=True):
+    if st.button("Predict Price", use_container_width=True):
 
-        luxury_brands = ["bmw", "mercedes-benz", "audi", "lexus",
-                         "porsche", "jaguar", "land rover", "cadillac"]
-        is_luxury          = 1 if manufacturer in luxury_brands else 0
+        is_luxury = 1 if manufacturer in LUXURY_BRANDS else 0
         is_clean_title     = 1
         age_odometer_ratio = odometer / (vehicle_age + 1)
+        state_val          = "unknown" if state == "other" else state
 
         cat_cols_order = ["manufacturer", "condition", "cylinders", "fuel",
                           "transmission", "drive", "type", "paint_color", "state"]
         cat_vals_order = [manufacturer, condition, cylinders, fuel,
-                          transmission, drive, type_, paint_color, state]
+                          transmission, drive, type_, paint_color, state_val]
 
         encoded  = {}
         warnings = []
@@ -375,11 +442,12 @@ elif page == "Fiyat Tahmini":
             enc_val, used_val = safe_encode(col, val, cat_unique)
             encoded[col] = enc_val
             if used_val != val:
-                warnings.append(f"**{col}**: \"{val}\" → \"{used_val}\" olarak eşleştirildi")
+                warnings.append(f"{col}: '{val}' was not seen during training, mapped to '{used_val}'")
 
         if warnings:
-            st.warning(
-                "⚠️ Bazı değerler eğitim verisinde bulunmadığından eşleştirildi:\n\n" +
+            st.info(
+                "Note: Some values were not present in the training data and "
+                "were mapped to the closest known category:\n\n" +
                 "\n".join(warnings)
             )
 
@@ -406,16 +474,22 @@ elif page == "Fiyat Tahmini":
         prediction = rf_model.predict(input_df)[0]
         prediction = max(500, prediction)
 
-        st.success(f"### 🚗 Tahmini Fiyat: ${prediction:,.0f}")
+        st.success(f"Estimated Price: ${prediction:,.0f}")
 
         col1, col2, col3 = st.columns(3)
-        col1.metric("Tahmini Fiyat", f"${prediction:,.0f}")
-        col2.metric("Model", "Random Forest")
-        col3.metric("R² Skoru", "0.8289")
+        col1.metric("Estimated Price", f"${prediction:,.0f}")
+        col2.metric("Model Used", "Random Forest")
+        col3.metric("Model R2", "0.8289")
+
+        odometer_display = (
+            f"{odometer_input:,} km ({odometer:,.0f} miles)"
+            if unit == "Kilometers"
+            else f"{odometer_input:,} miles"
+        )
 
         st.markdown(f"""
-        **Girilen Özellikler:**
-        - Marka: {manufacturer} | Durum: {condition} | Yakıt: {fuel}
-        - Araç Yaşı: {vehicle_age} yıl | Kilometre: {odometer:,} mil
-        - Lüks Araç: {"Evet ✅" if is_luxury else "Hayır"}
+        **Input Summary:**
+        - Manufacturer: {manufacturer} | Condition: {condition} | Fuel: {fuel}
+        - Vehicle Age: {vehicle_age} years | Odometer: {odometer_display}
+        - Luxury Vehicle: {"Yes" if is_luxury else "No"}
         """)
